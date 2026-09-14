@@ -52,7 +52,7 @@ node --input-type=module --check < reconstruction-worker.js
 Usare `http://localhost:8080` sul computer. Un indirizzo HTTP di rete locale sul telefono non abilita la fotocamera: usare HTTPS.
 
 - `tests/engine-smoke.html`: inferenza CPU reale su una foto pubblica MediaPipe, senza fotocamera. Verifica la disponibilità di posa e segmentazione; non è un test di rotazione o accuratezza.
-- `tests/reconstruction-smoke.html`: worker, mesh, renderer, rotazione, zoom ed export su una **figura sintetica di test**. Questa figura non è importata dall’app né usata nei risultati degli utenti.
+- `tests/reconstruction-smoke.html`: simulazione animata del giro completo tramite `Scan360`, con acquisizione progressiva di otto viste, quattro campioni stabili per vista, ritorno frontale, voce, worker, mesh ed export. Sagoma, orientamento e scala sono **sintetici**: il test non verifica MediaPipe o la fotocamera. La figura non è importata dall’app né usata nei risultati degli utenti.
 - Test Node: calibrazione, stato dell’app, entrambe le direzioni del giro, copertura incompleta, viste ripetute, spostamenti, postura, ricostruzione di un cilindro con geometria nota, separazione del busto dalle braccia e percorso fino ai risultati.
 
 Verifica fisica su iPhone/Android e confronto delle misure con un metro: **ancora da effettuare**. Il browser desktop a dimensioni mobili non dimostra la compatibilità su dispositivi reali.
