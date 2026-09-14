@@ -6,6 +6,7 @@ import * as geometry from '../measurements.mjs';
 import * as scan from '../scan360.mjs';
 import { reconstruct } from '../reconstruction.mjs';
 import { phantomViews } from './fixtures.mjs';
+import { VoiceGuide } from '../voice-guide.mjs';
 
 const fixtureViews=phantomViews();
 function setup() {
@@ -25,7 +26,7 @@ function setup() {
   const fakeStream = { getTracks: () => [track], getVideoTracks: () => [track] };
   class FakeWorker {terminate(){} postMessage(data){this.onmessage({data:{model:reconstruct(data.views)}});}}
   class FakeViewer {setModel(){} clear(){}}
-  const context = vm.createContext({ ...geometry, ...scan, fixtureViews, Worker:FakeWorker, BodyViewer:FakeViewer, URL, document, navigator: { mediaDevices: { getUserMedia: async () => fakeStream } }, window: { isSecureContext: true, addEventListener() {} }, performance: { now: () => now }, requestAnimationFrame: () => ++rafCount, cancelAnimationFrame() {} });
+  const context = vm.createContext({ ...geometry, ...scan, fixtureViews, VoiceGuide, setTimeout, clearTimeout, Worker:FakeWorker, BodyViewer:FakeViewer, URL, document, navigator: { mediaDevices: { getUserMedia: async () => fakeStream } }, window: { isSecureContext: true, addEventListener() {} }, performance: { now: () => now }, requestAnimationFrame: () => ++rafCount, cancelAnimationFrame() {} });
   const source = readFileSync(new URL('../app.js', import.meta.url), 'utf8').replace(/^import .*;\n/gm, '').replace('import.meta.url', '"http://localhost/app.js"').replace('updateControls(); initEngine();', 'updateControls();');
   vm.runInContext(source, context);
   const run = code => vm.runInContext(code, context);
