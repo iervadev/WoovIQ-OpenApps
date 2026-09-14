@@ -36,7 +36,7 @@ export function torsoWidth(mask, xNorm, yNorm, imageWidth) {
 export function analyzeBody(lm, mask, width, height) {
   const visible = i => lm[i] && (lm[i].visibility ?? 0) > 0.5 &&
     lm[i].x > 0.02 && lm[i].x < 0.98 && lm[i].y > 0.02 && lm[i].y < 0.98;
-  if (!lm || !mask || !visible(0) || ![[11,12],[23,24],[25,26],[27,28],[31,32]].every(pair => pair.some(visible))) return null;
+  if (!lm || !mask || ![[11,12],[23,24],[25,26],[27,28],[31,32]].every(pair => pair.some(visible))) return null;
   let top = -1, bottom = -1;
   for (let y = 0; y < mask.height; y++) {
     let count = 0;
@@ -49,11 +49,21 @@ export function analyzeBody(lm, mask, width, height) {
   const sy = (lm[11].y + lm[12].y) / 2, hy = (lm[23].y + lm[24].y) / 2;
   if (hy <= sy) return null;
   const sx = (lm[11].x + lm[12].x) / 2, hx = (lm[23].x + lm[24].x) / 2;
+  const straightLeg = (hip,knee,ankle) => {
+    if (![hip,knee,ankle].every(visible)) return true;
+    const a={x:(lm[hip].x-lm[knee].x)*width,y:(lm[hip].y-lm[knee].y)*height};
+    const b={x:(lm[ankle].x-lm[knee].x)*width,y:(lm[ankle].y-lm[knee].y)*height};
+    const denominator=Math.hypot(a.x,a.y)*Math.hypot(b.x,b.y);
+    return denominator>0 && (a.x*b.x+a.y*b.y)/denominator < -.85;
+  };
+  const armsClear=[[11,13],[12,14]].every(([shoulder,elbow])=>visible(elbow) && (Math.abs(lm[elbow].x-sx)-Math.abs(lm[shoulder].x-sx))*width/bodyHeight>.035);
+  const standing=straightLeg(23,25,27) && straightLeg(24,26,28) && Math.abs(sx-hx)*width/bodyHeight<.08 &&
+    [15,16].every(i=>!visible(i)||lm[i].y>sy+.03);
   const chest = torsoWidth(mask, sx + (hx - sx) * .3, sy + (hy - sy) * .3, width);
   const waist = torsoWidth(mask, sx + (hx - sx) * .68, sy + (hy - sy) * .68, width);
   const hip = torsoWidth(mask, hx, hy + .015, width);
   if (![chest, waist, hip].every(v => Number.isFinite(v) && v > 0)) return null;
-  return { height: bodyHeight, shoulder: Math.abs(lm[11].x - lm[12].x) * width / bodyHeight, chest, waist, hip };
+  return { standing, armsClear, topMask: top, bottomMask: bottom, maskHeight: mask.height, centerX: hx * width, imageWidth: width, levels: { chest: (sy + (hy-sy)*.30 - top/mask.height) * height / bodyHeight, waist: (sy + (hy-sy)*.68 - top/mask.height) * height / bodyHeight, hip: (hy + .015 - top/mask.height) * height / bodyHeight }, height: bodyHeight, shoulder: Math.abs(lm[11].x - lm[12].x) * width / bodyHeight, chest, waist, hip };
 }
 
 export function summarize(front, side) {
