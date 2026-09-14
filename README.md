@@ -1,4 +1,4 @@
-# WoovIQ BodyScan V4.1 — scansione 360° sul web
+# WoovIQ BodyScan V4.2 — scansione 360° sul web
 
 Scansione guidata con telefono fermo e persona che ruota sul posto. La fotocamera acquisisce otto silhouette, da cui viene ricostruita una **superficie 3D approssimata**. L’altezza è ricavata dalla silhouette dopo la calibrazione con un riferimento stampato: non viene chiesto di inserire l’altezza.
 
@@ -16,7 +16,11 @@ Scansione guidata con telefono fermo e persona che ruota sul posto. La fotocamer
 
 ## Guida vocale
 
-Premere **Prova voce** prima della scansione: il tocco attiva la sintesi vocale del browser e riproduce un messaggio in italiano. Lo stato audio mostra avvio, riproduzione ed eventuali errori. Se non si sente nulla, controllare volume multimediale, modalità silenziosa e dispositivi Bluetooth, quindi riprovare. Le istruzioni rimangono visibili anche senza audio. Le nuove indicazioni attendono la fine di quella in corso; viene mantenuta solo la prossima indicazione più recente.
+La guida parte automaticamente quando si preme **Avvia fotocamera** e accompagna la scansione. Non serve un pulsante di prova. I messaggi italiani sono file AAC inclusi nel sito, riprodotti tramite un unico elemento audio: non dipendono dalle voci di sintesi installate sul telefono. Il primo avvio avviene direttamente nel tocco sulla fotocamera per rispettare le regole audio dei browser mobili. La casella **Guida vocale** permette di disattivare o riattivare la voce.
+
+Gli errori di caricamento o blocco audio vengono mostrati sotto la casella; le istruzioni rimangono sempre visibili. Volume multimediale e uscita Bluetooth sono controllati dal telefono. I messaggi attendono la fine di quello in corso, conservando solo la prossima indicazione più recente.
+
+Le tracce e i testi sono in `audio/`; `python3 scripts/generate-voice.py` le rigenera su macOS con la voce italiana Alice installata.
 
 ## Come funziona e limiti
 

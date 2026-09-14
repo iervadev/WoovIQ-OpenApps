@@ -1,58 +1,69 @@
-// Keep utterances alive, serialize prompts, and surface mobile playback failures.
+// Bundled Italian audio uses the media player, independently of phone TTS voices.
+export function clipFor(text) {
+  if(text.startsWith('Avvio della fotocamera'))return 'camera';
+  if(text.startsWith('Premi prima Avvia'))return 'camera-required';
+  if(text.includes('si sta caricando'))return 'ai-loading';
+  if(text.includes('non è pronto'))return 'ai-error';
+  if(/Calibra|Completa i due tocchi/.test(text))return 'calibration';
+  if(/Corpo incompleto|Inquadra tutto/.test(text))return 'body';
+  if(text.startsWith('Guarda la fotocamera. Resta'))return 'start';
+  if(text.startsWith('Raddrizza'))return 'straight';
+  if(text.startsWith('Allontana'))return 'arms';
+  if(text.startsWith('Per iniziare'))return 'front';
+  if(text.startsWith('Resta sullo stesso'))return 'position';
+  if(text.startsWith('Ruota lentamente'))return 'rotate';
+  if(text.startsWith('Torna alla posa'))return 'pose';
+  if(text.startsWith('Giro completo'))return 'complete';
+  if(text.includes('Completa il giro'))return 'return';
+  if(/^Vista .* acquisita/.test(text))return 'captured';
+  return null;
+}
 export class VoiceGuide {
-  constructor({ synth, Utterance, status, setTimer=(fn,ms)=>setTimeout(fn,ms), clearTimer=id=>clearTimeout(id) }) {
-    this.synth=synth;this.Utterance=Utterance;this.status=status;
-    this.setTimer=setTimer;this.clearTimer=clearTimer;this.active=null;this.pending=null;this.timer=null;this.generation=0;
-    this.supported=!!synth && typeof Utterance==='function';
-    this.refreshVoices=()=>{try{this.voices=this.synth?.getVoices?.() || [];}catch{this.voices=[];}};
-    this.refreshVoices();synth?.addEventListener?.('voiceschanged',this.refreshVoices);
-    status(this.supported?'Premi “Prova voce” per attivare e verificare l’audio.':'Sintesi vocale non disponibile in questo browser. Le istruzioni restano visibili.');
+  constructor({player,status,setTimer=(fn,ms)=>setTimeout(fn,ms),clearTimer=id=>clearTimeout(id)}) {
+    this.player=player;this.status=status;this.setTimer=setTimer;this.clearTimer=clearTimer;
+    this.supported=typeof player?.play==='function' && typeof player?.pause==='function';
+    this.active=null;this.pending=null;this.generation=0;this.timer=null;this.blocked=false;
+    if(this.supported){
+      player.preload='auto';player.src='./audio/camera.m4a';
+      player.addEventListener('playing',()=>{
+        if(!this.active)return;
+        this.clearTimer(this.timer);this.timer=null;
+        this.status('Guida vocale in riproduzione.');
+      });
+      player.addEventListener('ended',()=>{
+        if(!this.active)return;
+        this.clearTimer(this.timer);this.timer=null;this.active=null;
+        const next=this.pending;this.pending=null;
+        if(next)this.playClip(next);else this.status('Guida vocale attiva: seguirà i passaggi della scansione.');
+      });
+      player.addEventListener('error',()=>{if(this.active)this.fail('File audio non disponibile. Controlla la connessione e riavvia la fotocamera.');});
+    }
+    status(this.supported?'La voce parte automaticamente con “Avvia fotocamera”.':'Audio non disponibile in questo browser. Le istruzioni restano visibili.');
   }
-  speak(text) {
-    if(!this.supported)return false;
-    if(this.active){this.pending=text;return true;}
-    this.refreshVoices();
-    const utterance=new this.Utterance(text),generation=this.generation;
-    utterance.lang='it-IT';utterance.rate=.95;utterance.pitch=1;utterance.volume=1;
-    const italian=this.voices.filter(v=>/^it(?:-|_)/i.test(v.lang)||v.lang==='it');
-    const selected=italian.find(v=>v.localService) || italian[0];
-    if(selected)utterance.voice=selected;
-    this.active=utterance;
-    const current=()=>generation===this.generation && this.active===utterance;
-    utterance.onstart=()=>{
-      if(!current())return;
-      this.clearTimer(this.timer);this.status('Riproduzione della guida vocale in corso.');
-      this.timer=this.setTimer(()=>{if(current())this.fail('La voce si è interrotta. Premi “Prova voce” per riattivarla.');},Math.max(15000,text.length*140));
-    };
-    utterance.onend=()=>{
-      if(!current())return;
-      this.clearTimer(this.timer);this.timer=null;this.active=null;
-      const next=this.pending;this.pending=null;
-      if(next)this.speak(next);else this.status('Voce pronta. Se non senti l’audio, controlla volume, modalità silenziosa e uscita Bluetooth.');
-    };
-    utterance.onerror=event=>{
-      if(!current())return;
-      this.fail(event.error==='not-allowed'?'Il browser richiede un tocco: premi “Prova voce”.':'Audio non disponibile. Premi “Prova voce”; controlla volume e uscita audio del telefono.');
-    };
-    this.status('Avvio della voce…');
-    this.timer=this.setTimer(()=>{if(current())this.fail('Il browser non ha avviato la voce. Premi “Prova voce” e controlla volume e modalità silenziosa.');},5000);
+  speak(text){const clip=clipFor(text);return clip ? this.playClip(clip) : false;}
+  activate(){this.blocked=false;return this.playClip('ready');}
+  playClip(clip){
+    if(!this.supported || this.blocked)return false;
+    if(this.active){if(clip!==this.active)this.pending=clip;return true;}
+    const generation=++this.generation;
+    this.active=clip;
+    const current=()=>this.generation===generation && this.active===clip;
+    this.player.src=`./audio/${clip}.m4a`;this.player.muted=false;this.player.volume=1;
+    this.status('Caricamento della guida vocale…');
+    this.timer=this.setTimer(()=>{if(current())this.fail('Audio non avviato. Controlla la connessione e riavvia la fotocamera.');},15000);
     try {
-      if(this.synth.paused)this.synth.resume();
-      // Must run synchronously inside the tap handler for initial activation.
-      this.synth.speak(utterance);
-    } catch {this.fail('Impossibile avviare la voce. Riprova in Safari o Chrome.');return false;}
+      // First call is synchronous within the camera/scan tap; reuse this element.
+      const playing=this.player.play();
+      playing?.catch(error=>{
+        if(!current())return;
+        this.fail(error.name==='NotAllowedError'?'Il browser ha bloccato l’audio. Riattiva “Guida vocale” con un tocco.':'Impossibile riprodurre la guida. Controlla la connessione e riavvia la fotocamera.');
+      });
+    }catch{this.fail('Impossibile riprodurre la guida vocale.');return false;}
     return true;
   }
-  fail(message){this.stop();this.status(message);}
+  fail(message){this.stop();this.blocked=true;this.status(message);}
   stop(){
-    this.generation++;this.clearTimer(this.timer);this.timer=null;this.pending=null;
-    const hadActive=!!this.active;this.active=null;
-    if(hadActive){try{this.synth.cancel();}catch{/* Playback state must not block scanning. */}}
-  }
-  test(){
-    // No unconditional cancel immediately before speak: some mobile engines
-    // drop that new utterance. If already playing, its events provide feedback.
-    if(this.active){this.status('La voce è già in riproduzione. Controlla il volume se non la senti.');return;}
-    this.speak('Guida vocale attiva. Segui le istruzioni per completare la scansione a trecentosessanta gradi.');
+    this.generation++;this.clearTimer(this.timer);this.timer=null;this.active=null;this.pending=null;this.blocked=false;
+    if(this.supported)this.player.pause();
   }
 }
