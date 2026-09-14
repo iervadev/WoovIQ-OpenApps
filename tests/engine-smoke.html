@@ -1,0 +1,24 @@
+<!doctype html><html lang="it"><meta charset="utf-8"><title>BodyScan · test motore reale</title>
+<h1>Test MediaPipe CPU con immagine pubblica</h1><p>Questo test usa un’immagine di esempio MediaPipe; non accede alla fotocamera.</p>
+<p id="status">Caricamento…</p><pre id="details"></pre>
+<img id="fixture" crossorigin="anonymous" src="https://storage.googleapis.com/mediapipe-assets/pose.jpg" alt="Immagine pubblica di test MediaPipe" style="max-width:600px;width:100%">
+<script type="module">
+import { analyzeBody } from '../measurements.mjs';
+import { FilesetResolver, PoseLandmarker } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/vision_bundle.mjs';
+const status = document.querySelector('#status');
+let engine;
+try {
+  const image = document.querySelector('#fixture'); await image.decode();
+  const files = await FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm');
+  engine = await PoseLandmarker.createFromOptions(files, { baseOptions: { modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task', delegate: 'CPU' }, runningMode: 'VIDEO', outputSegmentationMasks: true, numPoses: 1 });
+  engine.detectForVideo(image, performance.now(), result => {
+    const mask = result.segmentationMasks?.[0], lm = result.landmarks?.[0];
+    if (!mask || !lm) throw new Error('Nessuna posa o maschera ricevuta.');
+    const body = analyzeBody(lm, { data: mask.getAsFloat32Array(), width: mask.width, height: mask.height }, image.naturalWidth, image.naturalHeight);
+    if (!body) throw new Error('La posa è rilevata ma il controllo del corpo completo non passa.');
+    document.querySelector('#details').textContent = JSON.stringify({ landmarks: lm.length, mask: [mask.width, mask.height], body }, null, 2);
+    status.textContent = 'PASS: inferenza reale, maschera e misure in pixel disponibili.';
+  });
+} catch (error) { status.textContent = 'FAIL: ' + error.message; }
+finally { engine?.close(); }
+</script></html>
