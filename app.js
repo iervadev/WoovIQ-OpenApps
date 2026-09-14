@@ -2,6 +2,7 @@ import { imagePoint, analyzeBody } from './measurements.mjs';
 import { Scan360, poseAngle, silhouette } from './scan360.mjs';
 import { exportOBJ } from './reconstruction.mjs';
 import { BodyViewer } from './viewer.mjs';
+import { VoiceGuide } from './voice-guide.mjs';
 
 const $ = s => document.querySelector(s);
 const video = $('#video'), overlay = $('#overlay'), ctx = overlay.getContext('2d');
@@ -18,9 +19,14 @@ function step(n) { for (let i = 1; i <= 4; i++) $('#s' + i).classList.toggle('ac
 function freshBody() { return body && performance.now() - lastValidAt < 700; }
 
 function clearResults() { $('#result').classList.remove('show'); $('#metrics').replaceChildren(); model=null; viewer?.clear(); }
-function say(text){if($('#voice').checked && 'speechSynthesis' in window){window.speechSynthesis.cancel();const speech=new SpeechSynthesisUtterance(text);speech.lang='it-IT';window.speechSynthesis.speak(speech);}}
+const voiceGuide=new VoiceGuide({synth:window.speechSynthesis,Utterance:window.SpeechSynthesisUtterance,status:text=>{$('#voiceStatus').textContent=text;}});
+if(!voiceGuide.supported){$('#voice').checked=false;$('#voice').disabled=true;$('#testVoice').disabled=true;}
+function say(text){if($('#voice').checked)voiceGuide.speak(text);}
+$('#testVoice').addEventListener('click',()=>{$('#voice').checked=true;voiceGuide.test();});
+$('#voice').addEventListener('change',()=>{if($('#voice').checked)voiceGuide.test();else{voiceGuide.stop();$('#voiceStatus').textContent='Guida vocale disattivata.';}});
+let lastVoiceCorrection='',lastVoiceCorrectionAt=-Infinity;
 function invalidateScan() {
-  window.speechSynthesis?.cancel();
+  voiceGuide.stop();lastVoiceCorrection='';lastVoiceCorrectionAt=-Infinity;
   capture=null;currentFrame=null;lastCapturedId=-1;worker?.terminate();worker=null;jobId++;
   clearResults(); $('#samples').textContent='0 / 8'; $('#scanProgress').value=0;
   document.querySelectorAll('.viewDot').forEach(el=>el.classList.remove('done'));
@@ -81,7 +87,7 @@ async function startCamera() {
   } finally { cameraLoading = false; updateControls(); }
 }
 
-$('#start').addEventListener('click', startCamera);
+$('#start').addEventListener('click',()=>{const opening=startCamera();say('Avvio della fotocamera. Calibra il riferimento da dieci centimetri prima della scansione.');return opening;});
 $('#switchCamera').addEventListener('click', () => { facing = facing === 'user' ? 'environment' : 'user'; startCamera(); });
 $('#reset').addEventListener('click', () => {
   invalidateScan(); clearCalibration(); updateControls(); step(stream ? 2 : 1);
@@ -124,7 +130,7 @@ function prerequisite() {
   return null;
 }
 $('#scan').addEventListener('click', () => {
-  const reason=prerequisite();if(reason){hint(reason);return;}
+  const reason=prerequisite();if(reason){hint(reason);say(reason);return;}
   // Preserve the most recent detection when resetting the previous result.
   const frame=currentFrame;invalidateScan();currentFrame=frame;
   capture=new Scan360(markerScale);phase='scan';step(3);say('Guarda la fotocamera. Resta fermo fino alla prossima indicazione.');
@@ -145,6 +151,7 @@ function captureFrame(now) {
   for(let i=0;i<capture.views.length;i++)document.querySelector(`[data-view="${i}"]`)?.classList.add('done');
   badge('#phase',outcome.done?'360° completati':`360° · prossima vista ${capture.views.length*45}°`,'ok');
   if(outcome.captured!==undefined)say(outcome.message);
+  else if(frame && outcome.message && !outcome.done && !/resta fermo|Resta fermo|Vista .*:/.test(outcome.message) && outcome.message!==lastVoiceCorrection && now-lastVoiceCorrectionAt>7000){say(outcome.message);lastVoiceCorrection=outcome.message;lastVoiceCorrectionAt=now;}
   if(outcome.done){say('Giro completo. Ricostruzione del modello.');const views=capture.views;capture=null;finish(views);}
 }
 function finish(views) {

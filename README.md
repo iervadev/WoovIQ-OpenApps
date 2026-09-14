@@ -1,4 +1,4 @@
-# WoovIQ BodyScan V4.0 — scansione 360° sul web
+# WoovIQ BodyScan V4.1 — scansione 360° sul web
 
 Scansione guidata con telefono fermo e persona che ruota sul posto. La fotocamera acquisisce otto silhouette, da cui viene ricostruita una **superficie 3D approssimata**. L’altezza è ricavata dalla silhouette dopo la calibrazione con un riferimento stampato: non viene chiesto di inserire l’altezza.
 
@@ -13,6 +13,10 @@ Scansione guidata con telefono fermo e persona che ruota sul posto. La fotocamer
 7. Al termine, trascinare il modello per ruotarlo, usare lo zoom ed esportare **OBJ in centimetri** o le misure in **JSON**. Sono disponibili altezza, torace, vita e fianchi. Non vengono inventati peso o BMI dalle immagini.
 
 È possibile annullare in qualsiasi momento. Giro incompleto, spostamenti rilevati, posa instabile o silhouette incoerenti non producono risultati validi. Il limite di una scansione è tre minuti; un cambio fotocamera/orientamento richiede una nuova calibrazione.
+
+## Guida vocale
+
+Premere **Prova voce** prima della scansione: il tocco attiva la sintesi vocale del browser e riproduce un messaggio in italiano. Lo stato audio mostra avvio, riproduzione ed eventuali errori. Se non si sente nulla, controllare volume multimediale, modalità silenziosa e dispositivi Bluetooth, quindi riprovare. Le istruzioni rimangono visibili anche senza audio. Le nuove indicazioni attendono la fine di quella in corso; viene mantenuta solo la prossima indicazione più recente.
 
 ## Come funziona e limiti
 

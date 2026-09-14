@@ -1,5 +1,5 @@
-const CACHE = 'wooviq-bodyscan-v4.0-20260914';
-const CORE = ['./', './index.html', './app.js', './measurements.mjs', './scan360.mjs', './reconstruction.mjs', './reconstruction-worker.js', './viewer.mjs', './manifest.webmanifest', './calibration-marker.svg'];
+const CACHE = 'wooviq-bodyscan-v4.1-20260914';
+const CORE = ['./', './index.html', './app.js', './measurements.mjs', './scan360.mjs', './reconstruction.mjs', './reconstruction-worker.js', './viewer.mjs', './voice-guide.mjs', './manifest.webmanifest', './calibration-marker.svg'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(CORE)).then(() => self.skipWaiting()));
 });
