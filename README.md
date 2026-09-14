@@ -1,53 +1,50 @@
-# WoovIQ BodyScan — V3.5
+# WoovIQ BodyScan V4.0 — scansione 360° sul web
 
-Webapp statica per acquisizione antropometrica **frontale e laterale**, con MediaPipe Pose Landmarker e segmentazione locale della persona. La V3.5 sostituisce il vecchio timer “360°” con due acquisizioni guidate, ciascuna di almeno 8 campioni stabili. Non produce una mesh corporea 3D.
+Scansione guidata con telefono fermo e persona che ruota sul posto. La fotocamera acquisisce otto silhouette, da cui viene ricostruita una **superficie 3D approssimata**. L’altezza è ricavata dalla silhouette dopo la calibrazione con un riferimento stampato: non viene chiesto di inserire l’altezza.
 
-## Avvio
+## Uso su telefono
+
+1. Aprire il sito HTTPS in Safari su iPhone o Chrome su Android. Consentire la fotocamera e attendere `AI: pronta`. Usare la posteriore a 1×, senza zoom digitale, fissando il telefono verticale.
+2. Stampare `calibration-marker.svg` al 100%, senza adattamento alla pagina. Verificare con un righello che i bordi esterni misurino **10 × 10 cm**.
+3. Mettere il marker accanto alla persona, sullo stesso piano/distanza dalla fotocamera, rivolto all’obiettivo. Non usare il marker visualizzato su uno schermo. Premere **Calibra 10 cm** e toccare il bordo esterno superiore e quello inferiore. La calibrazione è manuale; il successivo rilevamento dell’altezza è automatico.
+4. Inquadrare tutta la persona, testa, mani e piedi inclusi, con abiti aderenti, luce uniforme, gambe dritte e braccia basse distanziate dal busto di circa 30°. Il marker non deve coprire la persona.
+5. Premere **Avvia scansione 360°**. Restare fermi per la prima vista, poi ruotare nello stesso verso a intervalli di circa 45°, fermandosi brevemente quando richiesto. Il sistema accetta entrambi i versi e raccoglie quattro campioni stabili per vista.
+6. Acquisire 0°, 45°, 90°, 135°, 180°, 225°, 270° e 315°, poi tornare alla posa iniziale per verificare il giro completo. La guida vocale può essere disattivata. Se l’orientamento non è riconosciuto, seguire il messaggio e fermarsi; non muovere telefono, zoom o posizione della persona.
+7. Al termine, trascinare il modello per ruotarlo, usare lo zoom ed esportare **OBJ in centimetri** o le misure in **JSON**. Sono disponibili altezza, torace, vita e fianchi. Non vengono inventati peso o BMI dalle immagini.
+
+È possibile annullare in qualsiasi momento. Giro incompleto, spostamenti rilevati, posa instabile o silhouette incoerenti non producono risultati validi. Il limite di una scansione è tre minuti; un cambio fotocamera/orientamento richiede una nuova calibrazione.
+
+## Come funziona e limiti
+
+- MediaPipe Pose Landmarker 1.0.1 produce punti anatomici e maschera della persona. Il sistema passa dalla GPU alla CPU se rileva maschere vuote o errori persistenti. CPU disponibile anche tramite `Riprova AI`.
+- Gli orientamenti di acquisizione sono **stime** derivate dai landmark tridimensionali delle spalle; non sono pose di camera calibrate o misure angolari certificate. Il modello può fallire soprattutto di schiena o quando parti del corpo sono occluse. I controlli su posizione e dimensioni non possono rilevare ogni movimento del telefono o della persona.
+- Le silhouette vengono normalizzate rispetto all’altezza e al centro del bacino. In un Web Worker, la loro intersezione con proiezione ortografica (*visual hull*) genera un volume discreto e una mesh. **Nessun avatar standard viene usato nel risultato.**
+- La griglia è 80 × 144 × 80, con passo orizzontale pari allo 0,9/80 dell’altezza (circa 2 cm per 175 cm). Il passo è una risoluzione di calcolo, **non un’accuratezza garantita**. La superficie può essere squadrata e presentare artefatti.
+- Le circonferenze vengono stimate su sezioni anatomiche euristiche del volume. Il componente principale della sezione, dopo separazione di sottili ponti di voxel, è approssimato con un contorno convesso. Se le braccia si fondono col busto, i risultati possono essere sovrastimati: distanziarle è essenziale.
+- Silhouette, prospettiva, abiti, capelli, postura, calibrazione e stima angolare introducono errori. Il visual hull non ricostruisce concavità invisibili nelle silhouette, texture o dettagli fini. Non è un sistema di fotogrammetria calibrata né un sensore di profondità.
+- **Misure non validate per uso clinico o metrologico.** Confrontare con un metro su più persone e scansioni ripetute prima di attribuire accuratezza. Il sistema non può garantire un’altezza reale senza un riferimento correttamente posizionato.
+
+Riferimenti: [MediaPipe Pose Landmarker Web](https://developers.google.com/edge/mediapipe/solutions/vision/pose_landmarker/web_js), [Laurentini, The Visual Hull Concept, 1994](https://cir.nii.ac.jp/crid/1361137044532595200).
+
+## Dati e dipendenze
+
+Il video è elaborato localmente. Le silhouette temporanee restano nella memoria del browser e sono eliminate con reset/annullamento/nuova scansione; non vengono caricate su un server. Solo gli export richiesti dall’utente creano file sul dispositivo. Le foto della fotocamera non vengono conservate.
+
+Il primo caricamento richiede Internet per JavaScript/WASM da jsDelivr e modello da Google Storage. Non è garantito il funzionamento offline del modello. Il renderer 3D usa WebGL, senza ulteriori librerie esterne; il calcolo usa un Web Worker. Se il renderer non è disponibile, resta l’esportazione della mesh.
+
+## Avvio locale e test
 
 ```sh
 python3 -m http.server 8080
-```
-
-Aprire `http://localhost:8080`. Su iPhone (Safari) e Android (Chrome) usare un sito **HTTPS**, ad esempio GitHub Pages; l’indirizzo HTTP della rete locale non abilita la fotocamera sul telefono. Il primo caricamento del motore richiede Internet: JavaScript/WASM arrivano da jsDelivr e il modello da Google Storage. Non è garantito l’uso offline del modello.
-
-## Procedura
-
-1. Avviare la fotocamera e concedere il permesso. Usare preferibilmente la posteriore, lente 1×, telefono fermo e verticale.
-2. Inserire l’altezza misurata con un metro (80–250 cm). In alternativa stampare `calibration-marker.svg` al 100%, verificare i 10 cm con un righello e toccare i bordi esterni opposti del marker tenuto sul piano del corpo. Un marker sullo schermo o a una distanza diversa dal corpo non fornisce una scala valida.
-3. Inquadrare testa e piedi, con buona luce e abiti aderenti; tenere le braccia leggermente staccate dal busto.
-4. Premere **Acquisisci vista frontale** e restare fermi. Il pulsante indica quale requisito manca se non è possibile partire.
-5. Girarsi di 90° nello stesso punto e premere **Acquisisci vista laterale**. Una seconda vista frontale viene rifiutata. Dopo 20 secondi senza campioni sufficienti è possibile riprovare.
-6. Leggere le stime di torace, vita e fianchi. Cambiando fotocamera o riferimento di scala si eliminano i campioni precedenti.
-
-## Cosa è stato corretto
-
-- feedback sul motivo che impedisce l’avvio; retry del motore AI;
-- video completo con `object-fit: contain`, coordinate dei tocchi corrette e specchiatura coerente;
-- un solo ciclo di acquisizione e annullamento della scansione al cambio fotocamera;
-- segmentazione della persona anziché confronto dei colori con un pixel dello sfondo;
-- uso immediato e rilascio delle maschere MediaPipe tramite callback;
-- controlli su corpo completo, stabilità, distanza e distinzione delle viste;
-- assenza di fallback che trasformavano campioni mancanti in circonferenze nulle;
-- rimozione del peso e BMI derivati da una formula non validata;
-- cache PWA aggiornata e limitata ai file dell’app.
-
-## Limiti e validazione
-
-Le circonferenze sono **stime sperimentali**: sezioni ellittiche ricavate dalla larghezza frontale e dalla profondità laterale. Le righe anatomiche sono euristiche, gli abiti e le braccia possono alterare la silhouette, la prospettiva introduce errore. Anche con un’altezza di riferimento corretta, non sono misure reali garantite né validate per uso clinico/metrologico. La rotazione non ricostruisce una superficie 3D e il peso non può essere determinato con questa procedura.
-
-Le immagini della fotocamera vengono elaborate nel browser, senza upload né salvataggio di foto. I risultati restano in memoria fino al reset/ricaricamento.
-
-## Test
-
-Serve Node.js 22 o successivo; nessuna dipendenza npm:
-
-```sh
 node --test tests/*.test.mjs
 node --input-type=module --check < app.js
+node --input-type=module --check < reconstruction-worker.js
 ```
 
-`tests/engine-smoke.html`, servito via localhost/HTTPS, esegue inoltre un’inferenza reale su un’immagine pubblica MediaPipe e verifica posa, maschera e geometria, senza fotocamera. Richiede Internet.
+Usare `http://localhost:8080` sul computer. Un indirizzo HTTP di rete locale sul telefono non abilita la fotocamera: usare HTTPS.
 
-Verificati: test automatici di geometria e stato; caricamento reale del motore nel browser desktop; layout a 390×844. Il browser a dimensioni mobili **non sostituisce** una prova su iPhone/Android fisici.
+- `tests/engine-smoke.html`: inferenza CPU reale su una foto pubblica MediaPipe, senza fotocamera. Verifica la disponibilità di posa e segmentazione; non è un test di rotazione o accuratezza.
+- `tests/reconstruction-smoke.html`: worker, mesh, renderer, rotazione, zoom ed export su una **figura sintetica di test**. Questa figura non è importata dall’app né usata nei risultati degli utenti.
+- Test Node: calibrazione, stato dell’app, entrambe le direzioni del giro, copertura incompleta, viste ripetute, spostamenti, postura, ricostruzione di un cilindro con geometria nota, separazione del busto dalle braccia e percorso fino ai risultati.
 
-Prima di dichiarare compatibilità e accuratezza: completare più scansioni in Safari iOS e Chrome Android (frontale/posteriore, permesso negato, retry e cambio orientamento), annotare modello del dispositivo/versione browser e confrontare torace/vita/fianchi con misure manuali ripetute. Nessuna accuratezza numerica è attualmente validata.
+Verifica fisica su iPhone/Android e confronto delle misure con un metro: **ancora da effettuare**. Il browser desktop a dimensioni mobili non dimostra la compatibilità su dispositivi reali.

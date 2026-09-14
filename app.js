@@ -1,4 +1,7 @@
-import { imagePoint, analyzeBody, median, summarize } from './measurements.mjs';
+import { imagePoint, analyzeBody } from './measurements.mjs';
+import { Scan360, poseAngle, silhouette } from './scan360.mjs';
+import { exportOBJ } from './reconstruction.mjs';
+import { BodyViewer } from './viewer.mjs';
 
 const $ = s => document.querySelector(s);
 const video = $('#video'), overlay = $('#overlay'), ctx = overlay.getContext('2d');
@@ -6,34 +9,34 @@ let stream = null, engine = null, engineLoading = false, cameraLoading = false;
 let facing = 'environment', phase = 'setup', frameId = null, lastVideoTime = -1;
 let lastInference = 0, lastValidAt = 0, landmarks = null, body = null;
 let calPoints = [], markerScale = null, calibrationSize = null;
-let front = [], side = [], capture = null, lastSampleAt = 0;
+let capture = null, currentFrame = null, worker = null, model = null, viewer = null;
+let jobId = 0, inferenceId = 0, lastCapturedId = -1;
 const connections = [[11,12],[11,23],[12,24],[23,24],[11,13],[13,15],[12,14],[14,16],[23,25],[25,27],[24,26],[26,28]];
 const hint = text => { $('#hint').textContent = text; };
 function badge(id, text, style = '') { $(id).textContent = text; $(id).className = 'badge ' + style; }
 function step(n) { for (let i = 1; i <= 4; i++) $('#s' + i).classList.toggle('active', i === n); }
-function knownHeight() {
-  const n = Number($('#knownHeight').value);
-  return Number.isFinite(n) && n >= 80 && n <= 250 ? n : null;
-}
 function freshBody() { return body && performance.now() - lastValidAt < 700; }
-function scale() { return knownHeight() && freshBody() ? knownHeight() / body.height : markerScale; }
-function clearResults() { $('#result').classList.remove('show'); $('#metrics').replaceChildren(); }
+
+function clearResults() { $('#result').classList.remove('show'); $('#metrics').replaceChildren(); model=null; viewer?.clear(); }
+function say(text){if($('#voice').checked && 'speechSynthesis' in window){window.speechSynthesis.cancel();const speech=new SpeechSynthesisUtterance(text);speech.lang='it-IT';window.speechSynthesis.speak(speech);}}
 function invalidateScan() {
-  capture = null; front = []; side = []; lastSampleAt = 0;
-  clearResults(); $('#samples').textContent = '0 / 16';
-  phase = stream ? 'front' : 'setup';
+  window.speechSynthesis?.cancel();
+  capture=null;currentFrame=null;lastCapturedId=-1;worker?.terminate();worker=null;jobId++;
+  clearResults(); $('#samples').textContent='0 / 8'; $('#scanProgress').value=0;
+  document.querySelectorAll('.viewDot').forEach(el=>el.classList.remove('done'));
+  phase=stream?'ready':'setup';
 }
 function clearCalibration() {
-  markerScale = null; calibrationSize = null; calPoints = [];
-  badge('#cal', knownHeight() ? 'Scala: altezza inserita' : 'Scala: —', knownHeight() ? 'ok' : '');
+  markerScale=null;calibrationSize=null;calPoints=[];badge('#cal','Scala: da calibrare');
+  $('#heightLive').textContent='—';
 }
 function updateControls() {
   $('#start').disabled = cameraLoading || !!stream;
   $('#switchCamera').disabled = cameraLoading || !!capture;
   $('#calibrate').disabled = !stream || cameraLoading || !!capture;
-  $('#knownHeight').disabled = !!capture;
-  $('#scan').disabled = !!capture || cameraLoading;
-  $('#scan').textContent = capture ? 'Acquisizione in corso…' : phase === 'side' ? 'Acquisisci vista laterale' : phase === 'result' ? 'Ripeti scansione' : 'Acquisisci vista frontale';
+  $('#scan').disabled = !!capture || cameraLoading || phase==='processing';
+  $('#cancel').hidden = !capture && phase!=='processing';
+  $('#scan').textContent = capture ? 'Scansione 360° in corso…' : phase==='processing' ? 'Ricostruzione 3D…' : 'Avvia scansione 360°';
   $('#cameraBadge').textContent = 'Camera: ' + (facing === 'user' ? 'frontale' : 'posteriore');
   $('#switchCamera').textContent = facing === 'user' ? '↻ Usa posteriore' : '↻ Usa frontale';
   video.classList.toggle('mirror', facing === 'user');
@@ -62,9 +65,9 @@ async function startCamera() {
       stopCamera(); invalidateScan(); clearCalibration(); updateControls();
       hint('La fotocamera si è interrotta. Premi Avvia fotocamera per ripartire.');
     });
-    lastVideoTime = -1; phase = 'front'; step(2);
+    lastVideoTime = -1; phase = 'ready'; step(2);
     badge('#phase', 'Camera attiva', 'ok');
-    hint('Inserisci la tua altezza misurata oppure calibra il marker. Poi inquadra tutto il corpo e acquisisci la vista frontale.');
+    hint('Calibra il marker da 10 cm. L’altezza sarà rilevata dalla fotocamera: non devi inserirla. Poi avvia il giro a 360°.');
     frameId = requestAnimationFrame(loop);
   } catch (error) {
     stopCamera(); phase = 'setup';
@@ -80,18 +83,14 @@ async function startCamera() {
 
 $('#start').addEventListener('click', startCamera);
 $('#switchCamera').addEventListener('click', () => { facing = facing === 'user' ? 'environment' : 'user'; startCamera(); });
-$('#knownHeight').addEventListener('input', () => {
-  invalidateScan(); clearCalibration(); updateControls();
-  hint(knownHeight() ? 'Altezza impostata. Inquadra testa e piedi, guarda la fotocamera e acquisisci la vista frontale.' : 'Inserisci un’altezza tra 80 e 250 cm, oppure usa il marker stampato.');
-});
 $('#reset').addEventListener('click', () => {
   invalidateScan(); clearCalibration(); updateControls(); step(stream ? 2 : 1);
   badge('#phase', stream ? 'Camera attiva' : 'Setup');
-  hint('Nuova scansione. Controlla l’altezza inserita oppure ripeti la calibrazione del marker.');
+  hint('Nuova scansione. Ripeti la calibrazione del riferimento da 10 cm.');
 });
 $('#calibrate').addEventListener('click', () => {
   if (!stream || !video.videoWidth) return;
-  invalidateScan(); clearCalibration(); $('#knownHeight').value = ''; phase = 'calibrate';
+  invalidateScan(); clearCalibration(); phase = 'calibrate';
   badge('#phase', 'Tocca 2 punti', 'warn');
   hint('Stampa il marker al 100% e verifica i 10 cm con un righello. Tienilo sul piano del corpo e tocca i due bordi esterni opposti.');
   updateControls();
@@ -107,9 +106,9 @@ overlay.addEventListener('pointerup', event => {
       calPoints = []; hint('Punti troppo vicini. Ripeti i due tocchi sui bordi esterni del marker.');
     } else {
       markerScale = 10 / pixels; calibrationSize = [overlay.width, overlay.height];
-      phase = 'front'; step(3); badge('#cal', 'Scala: marker 10 cm', 'ok');
+      phase = 'ready'; step(3); badge('#cal', 'Scala: marker 10 cm', 'ok');
       badge('#phase', 'Vista frontale');
-      hint('Calibrazione completata. Non spostare il telefono. Inquadra tutto il corpo e acquisisci la vista frontale.');
+      hint('Calibrazione completata. Non spostare il telefono. Inquadra tutto il corpo, poi premi Avvia scansione 360°.');
     }
   }
   drawOverlay(); updateControls();
@@ -119,76 +118,72 @@ function prerequisite() {
   if (!stream) return 'Premi prima Avvia fotocamera e consenti l’accesso.';
   if (engineLoading) return 'Il motore AI si sta caricando. Attendi che compaia AI: pronta.';
   if (!engine) return 'Il motore AI non è pronto. Premi Riprova AI e controlla la connessione.';
-  if (phase === 'calibrate') return 'Completa i due tocchi sul marker, oppure inserisci l’altezza misurata.';
-  if (!knownHeight() && !markerScale) return 'Inserisci la tua altezza misurata oppure premi Calibra 10 cm.';
+  if (phase === 'calibrate') return 'Completa i due tocchi sui bordi esterni del marker.';
+  if (!markerScale) return 'Premi Calibra 10 cm e tocca i bordi del riferimento stampato: l’altezza verrà rilevata automaticamente.';
   if (!freshBody()) return 'Corpo incompleto o non rilevato. Inquadra testa e piedi, usa buona luce e stacca leggermente le braccia.';
   return null;
 }
 $('#scan').addEventListener('click', () => {
-  const reason = prerequisite();
-  if (reason) { hint(reason); return; }
-  if (phase !== 'side') { invalidateScan(); phase = 'front'; }
-  clearResults();
-  capture = { view: phase, started: performance.now() }; lastSampleAt = 0;
-  badge('#phase', phase === 'side' ? 'Acquisizione laterale' : 'Acquisizione frontale', 'warn');
-  hint(phase === 'side' ? 'Girati di 90°, resta nello stesso punto e tieni le braccia poco staccate dal busto.' : 'Guarda la fotocamera, resta fermo con le braccia poco staccate dal busto.');
-  step(3); updateControls();
+  const reason=prerequisite();if(reason){hint(reason);return;}
+  // Preserve the most recent detection when resetting the previous result.
+  const frame=currentFrame;invalidateScan();currentFrame=frame;
+  capture=new Scan360(markerScale);phase='scan';step(3);say('Guarda la fotocamera. Resta fermo fino alla prossima indicazione.');
+  badge('#phase','360° · guarda la fotocamera','warn');
+  hint('Guarda la fotocamera e resta fermo. Dopo ogni vista ruota di circa 45° nello stesso verso.');updateControls();
 });
+$('#cancel').addEventListener('click',()=>{invalidateScan();badge('#phase','Scansione annullata');hint('Puoi riprovare: torna di fronte alla fotocamera.');updateControls();});
 function captureFrame(now) {
-  if (!capture) return;
-  const target = capture.view === 'front' ? front : side;
-  if (now - capture.started > 20000) {
-    target.length = 0; capture = null; updateControls();
-    badge('#phase', 'Acquisizione da ripetere', 'warn');
-    hint('Non ho raccolto abbastanza campioni stabili. Controlla inquadratura e posizione, poi riprova.'); return;
-  }
-  if (!freshBody() || now - lastSampleAt < 250) return;
-  const frontal = median(front.map(s => s.shoulder));
-  if (capture.view === 'front' && body.shoulder < .14) {
-    hint('Vista frontale: gira il busto verso la fotocamera.'); return;
-  }
-  if (capture.view === 'side' && body.shoulder > frontal * .65) {
-    hint('Vista laterale: girati di 90° rispetto alla vista frontale.'); return;
-  }
-  if (capture.view === 'side' && Math.abs(body.height / median(front.map(s => s.height)) - 1) > .15) {
-    hint('Resta alla stessa distanza dalla fotocamera, senza piegarti.'); return;
-  }
-  const factor = scale();
-  if (!factor || body.height * factor < 80 || body.height * factor > 250) {
-    capture = null; target.length = 0; updateControls();
-    hint('La scala produce un’altezza fuori intervallo. Ripeti la calibrazione o inserisci l’altezza misurata.'); return;
-  }
-  // Restart the current acquisition if the silhouette changes by more than 8%.
-  if (target.length && ['chest','waist','hip','height'].some(k => Math.abs(body[k] / median(target.map(s => s[k])) - 1) > .08)) target.length = 0;
-  target.push({ ...body, scale: factor }); lastSampleAt = now;
-  $('#samples').textContent = `${front.length + side.length} / 16`;
-  badge('#phase', `${capture.view === 'front' ? 'Frontale' : 'Laterale'}: ${target.length} / 8`, 'ok');
-  if (target.length < 8) return;
-  const completed = capture.view; capture = null;
-  if (completed === 'front') {
-    phase = 'side'; hint('Vista frontale acquisita. Girati di 90° nello stesso punto, poi premi Acquisisci vista laterale.');
-  } else finish();
-  updateControls();
+  if(!capture)return;
+  const frame=freshBody()&&inferenceId!==lastCapturedId?currentFrame:null;
+  if(frame)lastCapturedId=inferenceId;
+  const outcome=capture.add(frame,now);
+  if(outcome.error){invalidateScan();hint(outcome.error);badge('#phase','Scansione da ripetere','warn');updateControls();return;}
+  // Do not overwrite guidance on animation frames without a new inference.
+  if(outcome.message && (frame || !freshBody()))hint(outcome.message);
+  $('#samples').textContent=`${capture.views.length} / 8`;
+  $('#scanProgress').value=capture.progress;
+  for(let i=0;i<capture.views.length;i++)document.querySelector(`[data-view="${i}"]`)?.classList.add('done');
+  badge('#phase',outcome.done?'360° completati':`360° · prossima vista ${capture.views.length*45}°`,'ok');
+  if(outcome.captured!==undefined)say(outcome.message);
+  if(outcome.done){say('Giro completo. Ricostruzione del modello.');const views=capture.views;capture=null;finish(views);}
 }
-function finish() {
+function finish(views) {
+  stopCamera();
+  phase='processing';step(4);updateControls();$('#scanProgress').value=100;
+  hint('Ricostruzione del volume dalle otto silhouette…');
+  const job=++jobId;
   try {
-    const result = summarize(front, side);
-    const rows = [[knownHeight() ? 'Altezza inserita' : 'Altezza stimata', result.height], ['Torace stimato', result.chest], ['Vita stimata', result.waist], ['Fianchi stimati', result.hip]];
-    $('#metrics').replaceChildren(...rows.map(([name, value]) => {
-      const card = document.createElement('div'); card.className = 'metric';
-      const label = document.createElement('span'); label.textContent = name;
-      const number = document.createElement('strong'); number.textContent = value.toFixed(1) + ' cm';
-      card.append(label, number); return card;
-    }));
-    $('#notice').textContent = 'Stime da silhouette frontale/laterale e sezioni ellittiche: non misure validate né un modello 3D. Confrontale con un metro. Il peso non si ricava da queste immagini.';
-    $('#result').classList.add('show'); phase = 'result'; step(4);
-    badge('#phase', 'Acquisizione completata', 'ok');
-    hint('Viste acquisite. Le circonferenze sono stime: abiti, postura e prospettiva influiscono sul risultato.');
-  } catch (error) {
-    invalidateScan(); hint(error.message); badge('#phase', 'Ripeti scansione', 'warn');
-  }
+    worker=new Worker(new URL('./reconstruction-worker.js',import.meta.url),{type:'module'});
+    worker.onmessage=({data})=>{
+      if(job!==jobId)return;worker.terminate();worker=null;
+      if(data.error){processingError(data.error);return;}
+      model=data.model;showResults();
+    };
+    worker.onerror=()=>{if(job===jobId)processingError('Ricostruzione non riuscita. Riprova con una nuova scansione.');};
+    worker.postMessage({views});
+  }catch(error){processingError(error.message);}
 }
-
+function processingError(message){invalidateScan();hint(message);badge('#phase','Ricostruzione da ripetere','warn');updateControls();}
+function showResults() {
+  const result=model.metrics;
+  const rows=[['Altezza rilevata',result.height],['Torace stimato',result.chest],['Vita stimata',result.waist],['Fianchi stimati',result.hip]];
+  $('#metrics').replaceChildren(...rows.map(([name,value])=>{
+    const card=document.createElement('div');card.className='metric';
+    const label=document.createElement('span');label.textContent=name;
+    const number=document.createElement('strong');number.textContent=value.toFixed(1)+' cm';card.append(label,number);return card;
+  }));
+  $('#notice').textContent=`Modello 3D stimato dalle silhouette. Griglia circa ${model.resolutionCm.toFixed(1)} cm: non è una precisione garantita. Abiti, movimento, prospettiva e orientamenti stimati influiscono sulle misure. Confrontale con un metro; peso e BMI non sono ricavati dalle immagini.`;
+  $('#result').classList.add('show');phase='result';step(4);badge('#phase','Modello 3D pronto','ok');
+  hint('Giro completo acquisito. Esplora il modello 3D e scarica misure e superficie.');updateControls();
+  $('#result').scrollIntoView?.({behavior:'smooth',block:'start'});
+  try{viewer ||= new BodyViewer($('#modelCanvas'));viewer.setModel(model);}catch(error){$('#viewerHint').textContent=error.message;}
+}
+function download(text,name,type){
+  const url=URL.createObjectURL(new Blob([text],{type})),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);
+}
+$('#exportOBJ').addEventListener('click',()=>{if(model)download(exportOBJ(model),'wooviq-body-scan.obj','text/plain');});
+$('#exportJSON').addEventListener('click',()=>{if(model)download(JSON.stringify({version:'4.0',units:'cm',metrics:model.metrics,method:model.method,resolutionCm:model.resolutionCm,validated:false},null,2),'wooviq-measurements.json','application/json');});
+$('#zoom').addEventListener('input',event=>{if(viewer){viewer.zoom=Number(event.target.value);viewer.draw();}});
 function drawOverlay() {
   const width = video.videoWidth, height = video.videoHeight;
   if (!width || !height) return;
@@ -233,7 +228,9 @@ function loop(now) {
         const hasForeground = data?.some(value => value >= .65);
         emptyMasks = landmarks && !hasForeground ? emptyMasks + 1 : 0;
         body = mask && landmarks && hasForeground ? analyzeBody(landmarks, { data, width: mask.width, height: mask.height }, video.videoWidth, video.videoHeight) : null;
-        if (body) lastValidAt = now;
+        inferenceId++;
+        currentFrame=null;
+        if(body){lastValidAt=now;currentFrame={body,angle:poseAngle(result.worldLandmarks?.[0]),frontFacing:(landmarks[0]?.visibility??0)>.65 && (landmarks[11]?.visibility??0)>.5 && (landmarks[12]?.visibility??0)>.5,mask:silhouette({data,width:mask.width,height:mask.height},body)};}
       });
       inferenceErrors = 0;
       if (emptyMasks >= 8 && engineMode === 'GPU') fallbackCPU();
@@ -253,8 +250,8 @@ function loop(now) {
   const quality = body ? 100 : landmarks ? 50 : 0;
   $('#qtxt').textContent = `${quality}%`; $('#qbar').style.width = `${quality}%`;
   badge('#body', body ? 'Corpo: inquadratura valida' : landmarks ? 'Corpo: inquadra testa e piedi' : 'Corpo: attesa', body ? 'ok' : 'warn');
-  const h = knownHeight() || (body && markerScale ? body.height * markerScale : null);
-  $('#heightLive').textContent = h ? `${h.toFixed(1)} cm` : '—';
+  const h = body && markerScale ? body.height * markerScale : null;
+  $('#heightLive').textContent = h ? (h>=80&&h<=250 ? `${h.toFixed(1)} cm` : 'Verifica calibrazione') : '—';
   frameId = requestAnimationFrame(loop);
 }
 
@@ -275,6 +272,7 @@ async function initEngine(delegate = 'GPU') {
   } finally { engineLoading = false; updateControls(); }
 }
 $('#retryAI').addEventListener('click', () => initEngine('CPU'));
-window.addEventListener('pagehide', () => { stopCamera(); invalidateScan(); updateControls(); });
+window.addEventListener('pagehide', () => { stopCamera(); invalidateScan(); clearCalibration();updateControls(); });
+window.addEventListener('orientationchange',()=>{if(stream){invalidateScan();clearCalibration();updateControls();hint('Orientamento cambiato: ripeti la calibrazione.');}});
 updateControls(); initEngine();
 if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));

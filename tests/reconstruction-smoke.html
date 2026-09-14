@@ -1,0 +1,23 @@
+<!doctype html><html lang="it"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Test ricostruzione 360°</title>
+<style>body{font:16px system-ui;background:#08111f;color:white;max-width:600px;margin:auto;padding:20px}canvas{width:100%;height:500px;touch-action:none}button{padding:14px;margin:8px}pre{white-space:pre-wrap}</style>
+<h1>Test con figura sintetica</h1><p>Questo è un test tecnico: la figura è generata matematicamente, non è una scansione reale. L’app usa esclusivamente le silhouette della fotocamera.</p>
+<p id="status">Ricostruzione in corso…</p><canvas id="model" tabindex="0" aria-label="Modello 3D di test"></canvas><label>Zoom <input id="zoom" type="range" min="1" max="3" step=".1" value="1.7"></label><button id="rotate">Ruota 90°</button><button id="download" disabled>Scarica OBJ di test</button><pre id="details"></pre>
+<script type="module">
+import { phantomViews } from './fixtures.mjs';
+import { BodyViewer } from '../viewer.mjs';
+import { exportOBJ } from '../reconstruction.mjs';
+const start=performance.now(),worker=new Worker('../reconstruction-worker.js',{type:'module'});
+worker.onmessage=({data})=>{
+ worker.terminate();if(data.error){document.querySelector('#status').textContent='FAIL: '+data.error;return;}
+ try{
+  const viewer=new BodyViewer(document.querySelector('#model'));viewer.setModel(data.model);
+  document.querySelector('#status').textContent='PASS: worker, superficie 3D e renderer completati.';
+  document.querySelector('#details').textContent=JSON.stringify({durationMs:Math.round(performance.now()-start),vertices:data.model.vertices.length/3,triangles:data.model.triangles.length/3,metrics:data.model.metrics,resolutionCm:data.model.resolutionCm},null,2);
+  document.querySelector('#zoom').oninput=e=>{viewer.zoom=Number(e.target.value);viewer.draw();};
+  document.querySelector('#rotate').onclick=()=>{viewer.yaw+=Math.PI/2;viewer.draw();};
+  document.querySelector('#download').disabled=false;
+  document.querySelector('#download').onclick=()=>{const a=document.createElement('a'),url=URL.createObjectURL(new Blob([exportOBJ(data.model)],{type:'text/plain'}));a.href=url;a.download='synthetic-phantom.obj';a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);};
+ }catch(e){document.querySelector('#status').textContent='FAIL: '+e.message;}
+};
+worker.onerror=e=>{document.querySelector('#status').textContent='FAIL: '+e.message;};worker.postMessage({views:phantomViews()});
+</script></html>
