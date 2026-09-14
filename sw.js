@@ -1,4 +1,4 @@
-const CACHE = 'wooviq-bodyscan-v4.2-20260914';
+const CACHE = 'wooviq-bodyscan-v4.2.1-20260914';
 const CORE = ['./', './index.html', './app.js', './measurements.mjs', './scan360.mjs', './reconstruction.mjs', './reconstruction-worker.js', './viewer.mjs', './voice-guide.mjs', './manifest.webmanifest', './calibration-marker.svg', ...['camera','ready','camera-required','ai-loading','ai-error','calibration','body','start','straight','arms','front','position','rotate','captured','return','pose','complete'].map(name=>`./audio/${name}.m4a`)];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(CORE)).then(() => self.skipWaiting()));

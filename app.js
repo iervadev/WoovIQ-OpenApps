@@ -24,8 +24,8 @@ if(!voiceGuide.supported){$('#voice').checked=false;$('#voice').disabled=true;}
 function say(text){if($('#voice').checked)voiceGuide.speak(text);}
 $('#voice').addEventListener('change',()=>{if($('#voice').checked)voiceGuide.activate();else{voiceGuide.stop();$('#voiceStatus').textContent='Guida vocale disattivata.';}});
 let lastVoiceCorrection='',lastVoiceCorrectionAt=-Infinity;
-function invalidateScan() {
-  voiceGuide.stop();lastVoiceCorrection='';lastVoiceCorrectionAt=-Infinity;
+function invalidateScan({keepVoice=false}={}) {
+  if(!keepVoice)voiceGuide.stop();lastVoiceCorrection='';lastVoiceCorrectionAt=-Infinity;
   capture=null;currentFrame=null;lastCapturedId=-1;worker?.terminate();worker=null;jobId++;
   clearResults(); $('#samples').textContent='0 / 8'; $('#scanProgress').value=0;
   document.querySelectorAll('.viewDot').forEach(el=>el.classList.remove('done'));
@@ -216,7 +216,9 @@ function drawOverlay() {
 }
 let inferenceErrors = 0, emptyMasks = 0, engineMode = 'GPU';
 function fallbackCPU() {
-  engine?.close(); engine = null; invalidateScan();
+  const wasScanning=phase==='scan';
+  engine?.close(); engine = null; invalidateScan({keepVoice:!wasScanning});
+  if(wasScanning)say('Il motore AI si sta caricando. Attendi che compaia AI: pronta.');
   hint('La modalità GPU non restituisce una silhouette valida. Passaggio alla CPU: attendi AI pronta, poi ripeti l’acquisizione.');
   initEngine('CPU');
 }

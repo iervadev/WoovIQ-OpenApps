@@ -76,3 +76,11 @@ test('camera controller completes all eight views, worker reconstruction and res
   assert.equal(app.run('phase'),'result',app.elements.get('#hint').textContent);assert.equal(app.elements.get('#metrics').children.length,4);
   assert.equal(app.run('model.views'),8);assert.equal(app.elements.get('#scan').disabled,false);
 });
+
+test('GPU fallback preserves startup audio but cancels instructions from an invalidated scan',()=>{
+ const app=setup();
+ app.run('let voiceStops=0;voiceGuide.stop=()=>{voiceStops++;};initEngine=()=>{};phase="ready";engine={close(){}};fallbackCPU();');
+ assert.equal(app.run('voiceStops'),0);
+ app.run('phase="scan";engine={close(){}};fallbackCPU();');
+ assert.equal(app.run('voiceStops'),1);
+});
