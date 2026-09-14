@@ -19,11 +19,10 @@ function step(n) { for (let i = 1; i <= 4; i++) $('#s' + i).classList.toggle('ac
 function freshBody() { return body && performance.now() - lastValidAt < 700; }
 
 function clearResults() { $('#result').classList.remove('show'); $('#metrics').replaceChildren(); model=null; viewer?.clear(); }
-const voiceGuide=new VoiceGuide({synth:window.speechSynthesis,Utterance:window.SpeechSynthesisUtterance,status:text=>{$('#voiceStatus').textContent=text;}});
-if(!voiceGuide.supported){$('#voice').checked=false;$('#voice').disabled=true;$('#testVoice').disabled=true;}
+const voiceGuide=new VoiceGuide({player:$('#voiceAudio'),status:text=>{$('#voiceStatus').textContent=text;}});
+if(!voiceGuide.supported){$('#voice').checked=false;$('#voice').disabled=true;}
 function say(text){if($('#voice').checked)voiceGuide.speak(text);}
-$('#testVoice').addEventListener('click',()=>{$('#voice').checked=true;voiceGuide.test();});
-$('#voice').addEventListener('change',()=>{if($('#voice').checked)voiceGuide.test();else{voiceGuide.stop();$('#voiceStatus').textContent='Guida vocale disattivata.';}});
+$('#voice').addEventListener('change',()=>{if($('#voice').checked)voiceGuide.activate();else{voiceGuide.stop();$('#voiceStatus').textContent='Guida vocale disattivata.';}});
 let lastVoiceCorrection='',lastVoiceCorrectionAt=-Infinity;
 function invalidateScan() {
   voiceGuide.stop();lastVoiceCorrection='';lastVoiceCorrectionAt=-Infinity;

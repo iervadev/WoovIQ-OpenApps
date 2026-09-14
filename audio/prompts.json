@@ -1,0 +1,19 @@
+{
+  "camera": "Avvio della fotocamera. Calibra il riferimento da dieci centimetri prima della scansione.",
+  "ready": "Guida vocale attiva. Segui le istruzioni della scansione.",
+  "camera-required": "Premi Avvia fotocamera e consenti l'accesso alla fotocamera.",
+  "ai-loading": "Il motore si sta caricando. Attendi che sia pronto.",
+  "ai-error": "Il motore non è pronto. Premi Riprova AI e controlla la connessione.",
+  "calibration": "Calibra il riferimento da dieci centimetri. Tocca il bordo superiore e quello inferiore.",
+  "body": "Inquadra tutto il corpo, dalla testa ai piedi. Usa buona luce e distanzia le braccia dal busto.",
+  "start": "Guarda la fotocamera. Resta fermo fino alla prossima indicazione.",
+  "straight": "Raddrizza le gambe e il busto. Tieni le braccia basse e leggermente distanziate.",
+  "arms": "Allontana le braccia dal busto di circa trenta gradi, mantenendole basse.",
+  "front": "Guarda la fotocamera, con le braccia leggermente distanziate.",
+  "position": "Resta sullo stesso punto, in piedi. Non spostare il telefono e non cambiare lo zoom.",
+  "rotate": "Ruota lentamente di quarantacinque gradi nello stesso verso e fermati.",
+  "captured": "Vista acquisita. Ruota di altri quarantacinque gradi nello stesso verso e fermati.",
+  "return": "Completa il giro e torna di fronte alla fotocamera.",
+  "pose": "Torna alla posa iniziale, con le braccia distanziate come all'inizio.",
+  "complete": "Giro completo. Attendi la ricostruzione del modello tridimensionale."
+}
