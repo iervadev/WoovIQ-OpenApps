@@ -1,4 +1,4 @@
-# WoovIQ BodyScan V4.2 — scansione 360° sul web
+# WoovIQ BodyScan V4.2.1 — scansione 360° sul web
 
 Scansione guidata con telefono fermo e persona che ruota sul posto. La fotocamera acquisisce otto silhouette, da cui viene ricostruita una **superficie 3D approssimata**. L’altezza è ricavata dalla silhouette dopo la calibrazione con un riferimento stampato: non viene chiesto di inserire l’altezza.
 
